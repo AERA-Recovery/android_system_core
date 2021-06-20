@@ -32,11 +32,7 @@ using android::hal::CommandResult;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
-#ifdef __ANDROID_RECOVERY__
 constexpr bool kIsRecovery = true;
-#else
-constexpr bool kIsRecovery = false;
-#endif
 
 DeviceInfo::DeviceInfo() {
     std::string scratch_device = android::snapshot::GetScratchOtaMetadataPartition();
