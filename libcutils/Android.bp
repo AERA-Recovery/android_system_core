@@ -210,7 +210,6 @@ cc_library {
                 misc_undefined: ["integer"],
             },
         },
-
         android_mips: {
             srcs: ["arch-mips/android_memset.c"],
             sanitize: {
@@ -223,7 +222,6 @@ cc_library {
                 misc_undefined: ["integer"],
             },
         },
-
         android_x86: {
             srcs: [
                 "arch-x86/android_memset16.S",
@@ -236,7 +234,6 @@ cc_library {
                 misc_undefined: [],
             },
         },
-
         android_x86_64: {
             srcs: [
                 "arch-x86_64/android_memset16.S",
