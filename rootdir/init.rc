@@ -1324,23 +1324,31 @@ on property:persist.device_config.mglru_native.lru_gen_config=none
   # Memcg v2 Experiment
   # TODO: Revert after go/android-memcgv2-exp b/386797433
   exec - system system -- /system/bin/memcgv2_activation_depth.sh 0
+  setprop persist.device_config.lmkd_native.psi_partial_stall_ms 70
 on property:persist.device_config.mglru_native.lru_gen_config=core
-  write /sys/kernel/mm/lru_gen/enabled 1
+  write /sys/kernel/mm/lru_gen/enabled y
+  # Memcg v2 Experiment
+  # TODO: Revert after go/android-memcgv2-exp b/386797433
+  exec - system system -- /system/bin/memcgv2_activation_depth.sh 1
+  setprop persist.device_config.lmkd_native.psi_partial_stall_ms 56
 on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
   write /sys/kernel/mm/lru_gen/enabled y
   # Memcg v2 Experiment
   # TODO: Revert after go/android-memcgv2-exp b/386797433
   exec - system system -- /system/bin/memcgv2_activation_depth.sh 1
+  setprop persist.device_config.lmkd_native.psi_partial_stall_ms 70
 on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_young
   write /sys/kernel/mm/lru_gen/enabled y
   # Memcg v2 Experiment
   # TODO: Revert after go/android-memcgv2-exp b/386797433
   exec - system system -- /system/bin/memcgv2_activation_depth.sh 2
+  setprop persist.device_config.lmkd_native.psi_partial_stall_ms 70
 on property:persist.device_config.mglru_native.lru_gen_config=all
   write /sys/kernel/mm/lru_gen/enabled y
   # Memcg v2 Experiment
   # TODO: Revert after go/android-memcgv2-exp b/386797433
   exec - system system -- /system/bin/memcgv2_activation_depth.sh 3
+  setprop persist.device_config.lmkd_native.psi_partial_stall_ms 70
 
 # Allow other processes to run `snapshotctl` through `init`. This requires
 # `set_prop` permission on `snapshotctl_prop`.
