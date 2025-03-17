@@ -715,49 +715,54 @@ void BatteryMonitor::dumpState(int fd) {
     char vs[128];
     const HealthInfo& props = *mHealthInfo;
 
+    snprintf(vs, sizeof(vs), "Cached HealthInfo:\n");
+    write(fd, vs, strlen(vs));
     snprintf(vs, sizeof(vs),
-             "ac: %d usb: %d wireless: %d dock: %d current_max: %d voltage_max: %d\n",
+             "  ac: %d usb: %d wireless: %d dock: %d current_max: %d voltage_max: %d\n",
              props.chargerAcOnline, props.chargerUsbOnline, props.chargerWirelessOnline,
              props.chargerDockOnline, props.maxChargingCurrentMicroamps,
              props.maxChargingVoltageMicrovolts);
     write(fd, vs, strlen(vs));
-    snprintf(vs, sizeof(vs), "status: %d health: %d present: %d\n",
+    snprintf(vs, sizeof(vs), "  status: %d health: %d present: %d\n",
              props.batteryStatus, props.batteryHealth, props.batteryPresent);
     write(fd, vs, strlen(vs));
-    snprintf(vs, sizeof(vs), "level: %d voltage: %d temp: %d\n", props.batteryLevel,
+    snprintf(vs, sizeof(vs), "  level: %d voltage: %d temp: %d\n", props.batteryLevel,
              props.batteryVoltageMillivolts, props.batteryTemperatureTenthsCelsius);
     write(fd, vs, strlen(vs));
 
     if (!mHealthdConfig->batteryCurrentNowPath.empty()) {
+        snprintf(vs, sizeof(vs), "  current now: %d\n", props.batteryCurrentMicroamps);
+        write(fd, vs, strlen(vs));
+    }
+
+    if (!mHealthdConfig->batteryCycleCountPath.empty()) {
+        snprintf(vs, sizeof(vs), "  cycle count: %d\n", props.batteryCycleCount);
+        write(fd, vs, strlen(vs));
+    }
+
+    if (!mHealthdConfig->batteryFullChargePath.empty()) {
+        snprintf(vs, sizeof(vs), "  Full charge: %d\n", props.batteryFullChargeUah);
+        write(fd, vs, strlen(vs));
+    }
+
+    snprintf(vs, sizeof(vs), "Real-time Values:\n");
+    write(fd, vs, strlen(vs));
+
+    if (!mHealthdConfig->batteryCurrentNowPath.empty()) {
         v = getIntField(mHealthdConfig->batteryCurrentNowPath);
-        snprintf(vs, sizeof(vs), "current now: %d\n", v);
+        snprintf(vs, sizeof(vs), "  current now: %d\n", v);
         write(fd, vs, strlen(vs));
     }
 
     if (!mHealthdConfig->batteryCurrentAvgPath.empty()) {
         v = getIntField(mHealthdConfig->batteryCurrentAvgPath);
-        snprintf(vs, sizeof(vs), "current avg: %d\n", v);
+        snprintf(vs, sizeof(vs), "  current avg: %d\n", v);
         write(fd, vs, strlen(vs));
     }
 
     if (!mHealthdConfig->batteryChargeCounterPath.empty()) {
         v = getIntField(mHealthdConfig->batteryChargeCounterPath);
-        snprintf(vs, sizeof(vs), "charge counter: %d\n", v);
-        write(fd, vs, strlen(vs));
-    }
-
-    if (!mHealthdConfig->batteryCurrentNowPath.empty()) {
-        snprintf(vs, sizeof(vs), "current now: %d\n", props.batteryCurrentMicroamps);
-        write(fd, vs, strlen(vs));
-    }
-
-    if (!mHealthdConfig->batteryCycleCountPath.empty()) {
-        snprintf(vs, sizeof(vs), "cycle count: %d\n", props.batteryCycleCount);
-        write(fd, vs, strlen(vs));
-    }
-
-    if (!mHealthdConfig->batteryFullChargePath.empty()) {
-        snprintf(vs, sizeof(vs), "Full charge: %d\n", props.batteryFullChargeUah);
+        snprintf(vs, sizeof(vs), "  charge counter: %d\n", v);
         write(fd, vs, strlen(vs));
     }
 }
