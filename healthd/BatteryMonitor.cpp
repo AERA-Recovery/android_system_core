@@ -342,9 +342,10 @@ static bool getBooleanField(const String8& path) {
     return value;
 }
 
-static int getIntField(const String8& path) {
+template <typename T = int>
+static T getIntField(const String8& path) {
     std::string buf;
-    int value = 0;
+    T value = 0;
 
     if (readFromFile(path, &buf) > 0)
         android::base::ParseInt(buf, &value);
@@ -416,11 +417,11 @@ void BatteryMonitor::updateValues(void) {
 
     if (!mHealthdConfig->batteryManufacturingDatePath.empty())
         ensureBatteryHealthData(mHealthInfo.get())->batteryManufacturingDateSeconds =
-                getIntField(mHealthdConfig->batteryManufacturingDatePath);
+                getIntField<int64_t>(mHealthdConfig->batteryManufacturingDatePath);
 
     if (!mHealthdConfig->batteryFirstUsageDatePath.empty())
         ensureBatteryHealthData(mHealthInfo.get())->batteryFirstUsageSeconds =
-                getIntField(mHealthdConfig->batteryFirstUsageDatePath);
+                getIntField<int64_t>(mHealthdConfig->batteryFirstUsageDatePath);
 
     mHealthInfo->batteryTemperatureTenthsCelsius =
             mBatteryFixedTemperature ? mBatteryFixedTemperature

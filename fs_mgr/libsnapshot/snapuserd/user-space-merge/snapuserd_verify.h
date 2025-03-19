@@ -34,7 +34,8 @@ using namespace android::storage_literals;
 
 class UpdateVerify {
   public:
-    UpdateVerify(const std::string& misc_name);
+    UpdateVerify(const std::string& misc_name, uint32_t verify_block_size,
+                 uint32_t num_verification_threads);
     void VerifyUpdatePartition();
     bool CheckPartitionVerification();
 
@@ -66,6 +67,7 @@ class UpdateVerify {
      */
     uint64_t verify_block_size_ = 1_MiB;
     uint64_t threshold_size_ = 2_GiB;
+    uint32_t num_verification_threads_;
     int queue_depth_ = 4;
 
     bool IsBlockAligned(uint64_t read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }

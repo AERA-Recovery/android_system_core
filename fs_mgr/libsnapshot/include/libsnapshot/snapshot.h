@@ -859,11 +859,20 @@ class SnapshotManager final : public ISnapshotManager {
     // Check if direct reads are enabled for the source image
     bool UpdateUsesODirect(LockedFile* lock);
 
+    // Check if we skip the verification of the target image
+    bool UpdateUsesSkipVerification(LockedFile* lock);
+
     // Get value of maximum cow op merge size
     uint32_t GetUpdateCowOpMergeSize(LockedFile* lock);
 
     // Get number of threads to perform post OTA boot verification
     uint32_t GetUpdateWorkerCount(LockedFile* lock);
+
+    // Get the verification block size
+    uint32_t GetVerificationBlockSize(LockedFile* lock);
+
+    // Get the number of verification threads
+    uint32_t GetNumVerificationThreads(LockedFile* lock);
 
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,

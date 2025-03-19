@@ -24,9 +24,8 @@
 #include <unistd.h>
 
 #include <chrono>
-#include <iostream>
+#include <future>
 #include <memory>
-#include <string_view>
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
@@ -44,7 +43,6 @@
 #include "snapuserd_core.h"
 #include "testing/dm_user_harness.h"
 #include "testing/host_harness.h"
-#include "testing/temp_device.h"
 #include "utility.h"
 
 namespace android {
@@ -68,6 +66,8 @@ struct TestParam {
     int block_size;
     int num_threads;
     uint32_t cow_op_merge_size;
+    uint32_t verification_block_size;
+    uint32_t num_verification_threads;
 };
 
 class SnapuserdTestBase : public ::testing::TestWithParam<TestParam> {
@@ -731,9 +731,17 @@ void SnapuserdTest::InitCowDevice() {
     auto opener = factory->CreateOpener(system_device_ctrl_name_);
     handlers_->DisableVerification();
     const TestParam params = GetParam();
-    auto handler = handlers_->AddHandler(
-            system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(), base_dev_->GetPath(),
-            opener, 1, params.io_uring, params.o_direct, params.cow_op_merge_size);
+    HandlerOptions options = {
+            .num_worker_threads = params.num_threads,
+            .use_iouring = params.io_uring,
+            .o_direct = params.o_direct,
+            .cow_op_merge_size = params.cow_op_merge_size,
+            .verify_block_size = params.verification_block_size,
+            .num_verification_threads = params.num_verification_threads,
+    };
+    auto handler =
+            handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
+                                  base_dev_->GetPath(), opener, options);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__
@@ -1273,9 +1281,17 @@ void HandlerTest::InitializeDevice() {
     ASSERT_NE(opener_, nullptr);
 
     const TestParam params = GetParam();
-    handler_ = std::make_shared<SnapshotHandler>(
-            system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(), base_dev_->GetPath(),
-            opener_, 1, false, false, params.o_direct, params.cow_op_merge_size);
+    HandlerOptions options = {
+            .num_worker_threads = params.num_threads,
+            .use_iouring = params.io_uring,
+            .o_direct = params.o_direct,
+            .cow_op_merge_size = params.cow_op_merge_size,
+            .verify_block_size = params.verification_block_size,
+            .num_verification_threads = params.num_verification_threads,
+    };
+    handler_ = std::make_shared<SnapshotHandler>(system_device_ctrl_name_, cow_system_->path,
+                                                 base_dev_->GetPath(), base_dev_->GetPath(),
+                                                 opener_, options);
     ASSERT_TRUE(handler_->InitCowDevice());
     ASSERT_TRUE(handler_->InitializeWorkers());
 

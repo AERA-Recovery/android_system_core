@@ -136,6 +136,7 @@ bool GetUserspaceSnapshotsEnabledProperty();
 bool GetIouringEnabledProperty();
 bool GetXorCompressionEnabledProperty();
 bool GetODirectEnabledProperty();
+bool GetSkipVerificationProperty();
 
 bool CanUseUserspaceSnapshots();
 bool IsDmSnapshotTestingEnabled();
