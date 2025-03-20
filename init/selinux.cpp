@@ -56,6 +56,7 @@
 #include <linux/audit.h>
 #include <linux/netlink.h>
 #include <stdlib.h>
+#include <sys/mount.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -701,8 +702,8 @@ void LoadSelinuxPolicyAndroid() {
 }
 
 #ifdef ALLOW_REMOUNT_OVERLAYS
-void SetupOverlays() {
-    if (android::fs_mgr::use_override_creds) return;
+bool EarlySetupOverlays() {
+    if (android::fs_mgr::use_override_creds) return false;
 
     bool has_overlays = false;
     std::string contents;
@@ -715,8 +716,16 @@ void SetupOverlays() {
             break;
         }
 
-    if (!has_overlays) return;
+    if (!has_overlays) return false;
+    if (mount("tmpfs", kSecondStageRes, "tmpfs", MS_REMOUNT | MS_NOSUID | MS_NODEV,
+              "mode=0755,uid=0,gid=0") == -1) {
+        PLOG(FATAL) << "Failed to remount tmpfs on " << kSecondStageRes << " to remove NO_EXEC";
+    }
 
+    return true;
+}
+
+void SetupOverlays() {
     // After adb remount, we mount all r/o volumes with overlayfs to allow writing.
     // However, since overlayfs performs its file operations in the context of the
     // mounting process, this will not work as is - init is in the kernel domain in
@@ -728,7 +737,6 @@ void SetupOverlays() {
     // We will call overlay_remounter which will do the unmounts/mounts.
     // But for that to work, the volumes must not be busy, so we need to copy
     // overlay_remounter from system to a ramdisk and run it from there.
-
     const char* kOverlayRemounter = "overlay_remounter";
     auto or_src = std::filesystem::path("/system/xbin/") / kOverlayRemounter;
     auto or_dest = std::filesystem::path(kSecondStageRes) / kOverlayRemounter;
@@ -756,6 +764,9 @@ void SetupOverlays() {
     PLOG(FATAL) << "execv(\"" << or_dest << "\") failed";
 }
 #else
+bool EarlySetupOverlays() {
+    return false;
+}
 void SetupOverlays() {}
 #endif
 
@@ -770,6 +781,9 @@ int SetupSelinux(char** argv) {
     boot_clock::time_point start_time = boot_clock::now();
 
     SelinuxSetupKernelLogging();
+
+    // Test to see if we should use overlays, and if so remount tmpfs before selinux will block
+    bool use_overlays = EarlySetupOverlays();
 
     // TODO(b/287206497): refactor into different headers to only include what we need.
     if (IsMicrodroid()) {
@@ -801,7 +815,7 @@ int SetupSelinux(char** argv) {
 
     // SetupOverlays does not return if overlays exist, instead it execs overlay_remounter
     // which then execs second stage init
-    SetupOverlays();
+    if (use_overlays) SetupOverlays();
 
     const char* path = "/system/bin/init";
     const char* args[] = {path, "second_stage", nullptr};
