@@ -80,6 +80,7 @@ init_device_sources = [
     "sigchld_handler.cpp",
     "snapuserd_transition.cpp",
     "switch_root.cpp",
+    "tradeinmode.cpp",
     "uevent_listener.cpp",
     "ueventd.cpp",
     "ueventd_parser.cpp",
