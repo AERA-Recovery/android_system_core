@@ -24,7 +24,6 @@
 namespace android {
 namespace init {
 
-// TODO: should this be renamed to FirstStageDevInitialize?
 class BlockDevInitializer final {
   public:
     BlockDevInitializer();
@@ -34,14 +33,11 @@ class BlockDevInitializer final {
     bool InitDmUser(const std::string& name);
     bool InitDevices(std::set<std::string> devices);
     bool InitDmDevice(const std::string& device);
-    bool InitPlatformDevice(const std::string& device);
-    bool InitHvcDevice(const std::string& device);
 
   private:
     ListenerAction HandleUevent(const Uevent& uevent, std::set<std::string>* devices);
 
     bool InitMiscDevice(const std::string& name);
-    bool InitDevice(const std::string& syspath, const std::string& device);
 
     std::unique_ptr<DeviceHandler> device_handler_;
     UeventListener uevent_listener_;

@@ -207,23 +207,11 @@ bool BlockDevInitializer::InitDevices(std::set<std::string> devices) {
 bool BlockDevInitializer::InitDmDevice(const std::string& device) {
     const std::string device_name(basename(device.c_str()));
     const std::string syspath = "/sys/block/" + device_name;
-    return InitDevice(syspath, device_name);
-}
-
-bool BlockDevInitializer::InitPlatformDevice(const std::string& dev_name) {
-    return InitDevice("/sys/devices/platform", dev_name);
-}
-
-bool BlockDevInitializer::InitHvcDevice(const std::string& dev_name) {
-    return InitDevice("/sys/devices/virtual/tty", dev_name);
-}
-
-bool BlockDevInitializer::InitDevice(const std::string& syspath, const std::string& device_name) {
     bool found = false;
 
-    auto uevent_callback = [&device_name, this, &found](const Uevent& uevent) {
+    auto uevent_callback = [&device_name, &device, this, &found](const Uevent& uevent) {
         if (uevent.device_name == device_name) {
-            LOG(VERBOSE) << "Creating device : " << device_name;
+            LOG(VERBOSE) << "Creating device-mapper device : " << device;
             device_handler_->HandleUevent(uevent);
             found = true;
             return ListenerAction::kStop;
@@ -233,13 +221,13 @@ bool BlockDevInitializer::InitDevice(const std::string& syspath, const std::stri
 
     uevent_listener_.RegenerateUeventsForPath(syspath, uevent_callback);
     if (!found) {
-        LOG(INFO) << "device '" << device_name << "' not found in /sys, waiting for its uevent";
+        LOG(INFO) << "dm device '" << device << "' not found in /sys, waiting for its uevent";
         Timer t;
         uevent_listener_.Poll(uevent_callback, 10s);
-        LOG(INFO) << "wait for device '" << device_name << "' returned after " << t;
+        LOG(INFO) << "wait for dm device '" << device << "' returned after " << t;
     }
     if (!found) {
-        LOG(ERROR) << "device '" << device_name << "' not found after polling timeout";
+        LOG(ERROR) << "dm device '" << device << "' not found after polling timeout";
         return false;
     }
     return true;
