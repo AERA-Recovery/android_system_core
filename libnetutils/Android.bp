@@ -18,6 +18,7 @@ license {
 cc_library_shared {
     name: "libnetutils",
     vendor_available: true,
+    recovery_available: true,
 
     srcs: [
         "dhcpclient.c",
@@ -54,6 +55,23 @@ cc_binary {
 
     shared_libs: [
         "libnetutils",
+    ],
+
+    cflags: ["-Werror"],
+}
+
+cc_binary {
+    name: "dhcptool",
+    recovery: true,
+
+    srcs: [
+        "dhcptool.c",
+    ],
+
+    shared_libs: [
+        "libnetutils",
+        "libcutils",
+        "liblog",
     ],
 
     cflags: ["-Werror"],
