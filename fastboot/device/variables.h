@@ -59,6 +59,7 @@ bool GetIsForceDebuggable(FastbootDevice* device, const std::vector<std::string>
 bool GetHardwareRevision(FastbootDevice* device, const std::vector<std::string>& args,
                          std::string* message);
 bool GetVariant(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
+bool GetFoxId(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
 bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string>& args,
                            std::string* message);
 bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& args,

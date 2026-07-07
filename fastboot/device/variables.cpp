@@ -89,6 +89,25 @@ bool GetSerial(FastbootDevice* /* device */, const std::vector<std::string>& /* 
     return true;
 }
 
+bool GetFoxId(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+              std::string* message) {
+    // OrangeFox build identifier. Mirrors the fallback chain used by fox_updater.cpp
+    // so that `fastboot getvar fox_id` returns the same value the updater relies on.
+    static const char* const kFoxIdProps[] = {
+            "ro.build.fox_id",      "ro.orangefox.build_id", "ro.orangefox.fox_id",
+            "ro.fox.build_id",      "ro.fox.fox_id",         "ro.orangefox.id",
+    };
+    for (const char* prop : kFoxIdProps) {
+        std::string value = android::base::GetProperty(prop, "");
+        if (!value.empty()) {
+            *message = value;
+            return true;
+        }
+    }
+    *message = "";
+    return true;
+}
+
 bool GetSecure(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                std::string* message) {
     *message = android::base::GetBoolProperty("ro.secure", "") ? "yes" : "no";
@@ -582,7 +601,8 @@ bool GetBatterySerialNumber(FastbootDevice* device, const std::vector<std::strin
     }
 
     if (GetDeviceLockStatus()) {
-        return device->WriteFail("Device is locked");
+        *message = "Device is locked";
+        return false;
     }
 
     *message = "unsupported";
@@ -590,7 +610,8 @@ bool GetBatterySerialNumber(FastbootDevice* device, const std::vector<std::strin
     int32_t version = 0;
     auto res = health_hal->getInterfaceVersion(&version);
     if (!res.isOk()) {
-        return device->WriteFail("Unable to query battery data");
+        *message = "Unable to query battery data";
+        return false;
     }
     if (version >= 3) {
         using aidl::android::hardware::health::BatteryHealthData;
@@ -598,7 +619,8 @@ bool GetBatterySerialNumber(FastbootDevice* device, const std::vector<std::strin
         BatteryHealthData data;
         auto res = health_hal->getBatteryHealthData(&data);
         if (!res.isOk()) {
-            return device->WriteFail("Unable to query battery data");
+            *message = "Unable to query battery data";
+            return false;
         }
         if (data.batterySerialNumber) {
             *message = *data.batterySerialNumber;
@@ -621,7 +643,8 @@ bool GetBatteryPartStatus(FastbootDevice* device, const std::vector<std::string>
     int32_t version = 0;
     auto res = health_hal->getInterfaceVersion(&version);
     if (!res.isOk()) {
-        return device->WriteFail("Unable to query battery data");
+        *message = "Unable to query battery data";
+        return false;
     }
     if (version >= 3) {
         using aidl::android::hardware::health::BatteryHealthData;
@@ -629,7 +652,8 @@ bool GetBatteryPartStatus(FastbootDevice* device, const std::vector<std::string>
         BatteryHealthData data;
         auto res = health_hal->getBatteryHealthData(&data);
         if (!res.isOk()) {
-            return device->WriteFail("Unable to query battery data");
+            *message = "Unable to query battery data";
+            return false;
         }
         status = data.batteryPartStatus;
     }
