@@ -16,6 +16,8 @@
 
 #include "usb_client.h"
 
+#include "aera_telemetry.h"
+
 #include <endian.h>
 #include <fcntl.h>
 #include <linux/usb/ch9.h>
@@ -266,6 +268,7 @@ ssize_t ClientUsbTransport::Read(void* data, size_t len) {
             return bytes_read_total == 0 ? -1 : bytes_read_total;
         }
         bytes_read_total += bytes_read_now;
+        AeraTelemetryAdvance(static_cast<uint64_t>(bytes_read_now));
         char_data += bytes_read_now;
         if (static_cast<size_t>(bytes_read_now) < bytes_to_read) {
             break;

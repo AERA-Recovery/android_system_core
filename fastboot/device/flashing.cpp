@@ -40,6 +40,7 @@
 #include <sparse/sparse.h>
 
 #include "fastboot_device.h"
+#include "aera_telemetry.h"
 #include "utility.h"
 
 using namespace android::fs_mgr;
@@ -106,6 +107,7 @@ int FlashRawDataChunk(PartitionHandle* handle, const char* data, size_t len) {
         }
         data += this_ret;
         ret += this_ret;
+        AeraTelemetryAdvance(static_cast<uint64_t>(this_ret));
     }
     return 0;
 }
@@ -126,6 +128,7 @@ int WriteCallback(void* priv, const void* data, size_t len) {
             PLOG(ERROR) << "lseek failed";
             return rv;
         }
+        AeraTelemetryAdvance(static_cast<uint64_t>(len));
         return 0;
     }
     return FlashRawDataChunk(handle, reinterpret_cast<const char*>(data), len);
@@ -139,6 +142,8 @@ int FlashSparseData(PartitionHandle* handle, std::vector<char>& downloaded_data)
         LOG(ERROR) << "Unable to open sparse data for flashing";
         return -EINVAL;
     }
+    const int64_t expanded_size = sparse_file_len(file, false, false);
+    if (expanded_size > 0) AeraTelemetrySetTotal(static_cast<uint64_t>(expanded_size));
     return sparse_file_callback(file, false, false, WriteCallback, reinterpret_cast<void*>(handle));
 }
 
@@ -148,6 +153,7 @@ int FlashBlockDevice(PartitionHandle* handle, std::vector<char>& downloaded_data
         *reinterpret_cast<uint32_t*>(downloaded_data.data()) == SPARSE_HEADER_MAGIC) {
         return FlashSparseData(handle, downloaded_data);
     } else {
+        AeraTelemetrySetTotal(downloaded_data.size());
         return FlashRawData(handle, downloaded_data);
     }
 }

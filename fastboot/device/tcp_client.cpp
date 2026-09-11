@@ -15,6 +15,7 @@
  */
 
 #include "tcp_client.h"
+#include "aera_telemetry.h"
 #include "constants.h"
 
 #include <android-base/errors.h>
@@ -90,6 +91,7 @@ ssize_t ClientTcpTransport::Read(void* data, size_t len) {
         } else {
             message_bytes_left_ -= bytes_read;
             total_read += bytes_read;
+            AeraTelemetryAdvance(static_cast<uint64_t>(bytes_read));
         }
     // There are more than one DATA phases if the downloading buffer is too
     // large, like a very big system image. All of data phases should be

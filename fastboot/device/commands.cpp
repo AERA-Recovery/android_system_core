@@ -43,6 +43,7 @@
 #include <bootloader_message/bootloader_message.h>
 
 #include "BootControlClient.h"
+#include "aera_telemetry.h"
 #include "constants.h"
 #include "fastboot_device.h"
 #include "flashing.h"
@@ -238,8 +239,10 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
         return device->WriteFail(message);
     }
 
+    AeraTelemetryBegin("erasing", partition_name, 0);
     PartitionHandle handle;
     if (!OpenPartition(device, partition_name, &handle)) {
+        AeraTelemetryComplete("erasing", partition_name, false);
         return device->WriteStatus(FastbootResult::FAIL, "Partition doesn't exist");
     }
     if (wipe_block_device(handle.fd(), get_block_device_size(handle.fd())) == 0) {
@@ -250,6 +253,7 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
             support_oem_postwipedata = OemPostWipeData(device);
         }
 
+        AeraTelemetryComplete("erasing", partition_name, true);
         if (!support_oem_postwipedata) {
             return device->WriteStatus(FastbootResult::OKAY, "Erasing succeeded");
         } else {
@@ -257,6 +261,7 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
             return true;
         }
     }
+    AeraTelemetryComplete("erasing", partition_name, false);
     return device->WriteStatus(FastbootResult::FAIL, "Erasing failed");
 }
 
@@ -306,15 +311,19 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
         return device->WriteStatus(FastbootResult::FAIL, "Invalid size (0)");
     }
     device->download_data().resize(size);
+    AeraTelemetryBegin("receiving", "", size);
     if (!device->WriteStatus(FastbootResult::DATA, android::base::StringPrintf("%08x", size))) {
+        AeraTelemetryComplete("receiving", "", false);
         return false;
     }
 
     if (device->HandleData(true, &device->download_data())) {
+        AeraTelemetryComplete("received", "", true);
         return device->WriteStatus(FastbootResult::OKAY, "");
     }
 
     PLOG(ERROR) << "Couldn't download data";
+    AeraTelemetryComplete("receiving", "", false);
     return device->WriteStatus(FastbootResult::FAIL, "Couldn't download data");
 }
 
@@ -589,14 +598,17 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
         CancelPartitionSnapshot(device, partition_name);
     }
 
+    AeraTelemetryBegin("flashing", partition_name, device->download_data().size());
     int ret = Flash(device, partition_name);
     if (ret < 0) {
+        AeraTelemetryComplete("flashing", partition_name, false);
         return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
     }
     if (partition_name == "userdata") {
         PostWipeData();
     }
 
+    AeraTelemetryComplete("flashing", partition_name, true);
     return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
 }
 
@@ -610,7 +622,10 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
     }
 
     bool wipe = (args.size() >= 3 && args[2] == "wipe");
-    return UpdateSuper(device, args[1], wipe);
+    AeraTelemetryBegin("updating", args[1], device->download_data().size());
+    const bool result = UpdateSuper(device, args[1], wipe);
+    AeraTelemetryComplete("updating", args[1], result);
+    return result;
 }
 
 static bool IsLockedDsu() {

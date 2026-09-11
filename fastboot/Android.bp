@@ -149,6 +149,7 @@ cc_binary {
     },
 
     srcs: [
+        "device/aera_telemetry.cpp",
         "device/commands.cpp",
         "device/fastboot_device.cpp",
         "device/flashing.cpp",
