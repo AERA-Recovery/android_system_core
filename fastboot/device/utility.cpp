@@ -16,6 +16,7 @@
 
 #include "utility.h"
 
+#include <algorithm>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -72,6 +73,28 @@ bool OpenLogicalPartition(FastbootDevice* device, const std::string& partition_n
     auto closer = [partition_name]() -> void { DestroyLogicalPartition(partition_name); };
     *handle = PartitionHandle(dm_path, std::move(closer));
     return true;
+}
+
+bool SlotHasBackingPartitions(FastbootDevice* device, const LpMetadata& metadata,
+                              size_t slot_number) {
+    auto boot_control_hal = device->boot_control_hal();
+    if (!boot_control_hal) return slot_number == 0;
+
+    const std::string suffix = boot_control_hal->GetSuffix(slot_number);
+    if (suffix.empty()) return false;
+
+    for (const auto& partition : metadata.partitions) {
+        if (android::base::EndsWith(GetPartitionName(partition), suffix)) return true;
+    }
+
+    // Dynamic metadata can omit an inactive slot during snapshot operations.
+    // Confirm it against physical A/B anchors before rejecting the slot.
+    static constexpr const char* kSlotAnchors[] = {
+            "boot", "init_boot", "vendor_boot", "recovery", "vbmeta", "dtbo"};
+    for (const char* anchor : kSlotAnchors) {
+        if (FindPhysicalPartition(std::string(anchor) + suffix)) return true;
+    }
+    return false;
 }
 
 }  // namespace
@@ -203,7 +226,21 @@ bool UpdateAllPartitionMetadata(FastbootDevice* device, const std::string& super
     size_t num_slots = 1;
     auto boot_control_hal = device->boot_control_hal();
     if (boot_control_hal) {
-        num_slots = boot_control_hal->GetNumSlots();
+        const size_t boot_slots = boot_control_hal->GetNumSlots();
+        const size_t metadata_slots = metadata.geometry.metadata_slot_count;
+        size_t backed_slots = 0;
+        while (backed_slots < boot_slots &&
+               SlotHasBackingPartitions(device, metadata, backed_slots)) {
+            ++backed_slots;
+        }
+        if (backed_slots == 0) backed_slots = 1;
+        num_slots = std::min(backed_slots, metadata_slots);
+        if (boot_slots != num_slots) {
+            LOG(WARNING) << "Boot control reported " << boot_slots
+                         << " slots, but only " << num_slots
+                         << " have backing partitions and Super metadata capacity; "
+                            "limiting the partition-table update";
+        }
     }
 
     bool ok = true;
