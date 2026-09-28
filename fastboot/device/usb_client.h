@@ -24,15 +24,27 @@
 class ClientUsbTransport : public Transport {
   public:
     ClientUsbTransport();
-    ~ClientUsbTransport() override = default;
+    ~ClientUsbTransport() override;
 
     ssize_t Read(void* data, size_t len) override;
     ssize_t Write(const void* data, size_t len) override;
     int Close() override;
     int Reset() override;
 
+    int ReadFd() const;
+    // FunctionFS may report POLLIN when the USB function is enabled even
+    // though the host has not sent a Fastboot command. Probe the command
+    // endpoint without entering the blocking AIO path used for payloads.
+    // Returns 0 when no command bytes are available yet.
+    ssize_t TryReadCommand(void* data, size_t len);
+    void ArmCommandRead();
+
   private:
-    std::unique_ptr<usb_handle> handle_;
+    struct CommandReader;
+    static void CommandReadLoop(std::shared_ptr<CommandReader> reader);
+
+    std::shared_ptr<usb_handle> handle_;
+    std::shared_ptr<CommandReader> command_reader_;
 
     DISALLOW_COPY_AND_ASSIGN(ClientUsbTransport);
 };

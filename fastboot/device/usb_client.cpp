@@ -17,15 +17,24 @@
 #include "usb_client.h"
 
 #include "aera_telemetry.h"
+#include "constants.h"
 
+#include <algorithm>
+#include <array>
+#include <cerrno>
+#include <chrono>
+#include <condition_variable>
 #include <endian.h>
 #include <fcntl.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/functionfs.h>
+#include <mutex>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/eventfd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <thread>
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -40,6 +49,21 @@ constexpr size_t kFbFfsBufSize = 16384;
 constexpr const char* kUsbFfsFastbootEp0 = "/dev/usb-ffs/fastboot/ep0";
 constexpr const char* kUsbFfsFastbootOut = "/dev/usb-ffs/fastboot/ep1";
 constexpr const char* kUsbFfsFastbootIn = "/dev/usb-ffs/fastboot/ep2";
+
+using namespace std::chrono_literals;
+
+struct ClientUsbTransport::CommandReader {
+    std::shared_ptr<usb_handle> handle;
+    android::base::unique_fd event_fd;
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::array<char, FB_RESPONSE_SZ> command{};
+    ssize_t result = 0;
+    bool armed = false;
+    bool in_flight = false;
+    bool ready = false;
+    bool stop = false;
+};
 
 struct FuncDesc {
     struct usb_interface_descriptor intf;
@@ -242,10 +266,35 @@ err:
 }
 
 ClientUsbTransport::ClientUsbTransport()
-    : handle_(std::unique_ptr<usb_handle>(create_usb_handle(kFbFfsNumBufs, kFbFfsBufSize))) {
+    : handle_(create_usb_handle(kFbFfsNumBufs, kFbFfsBufSize)) {
     if (!InitFunctionFs(handle_.get())) {
-        handle_.reset(nullptr);
+        handle_.reset();
+        return;
     }
+
+    command_reader_ = std::make_shared<CommandReader>();
+    command_reader_->handle = handle_;
+    command_reader_->event_fd.reset(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
+    if (command_reader_->event_fd < 0) {
+        PLOG(ERROR) << "ClientUsbTransport: cannot create command event";
+        command_reader_.reset();
+        return;
+    }
+
+    std::thread(&ClientUsbTransport::CommandReadLoop, command_reader_).detach();
+    ArmCommandRead();
+}
+
+ClientUsbTransport::~ClientUsbTransport() {
+    if (command_reader_ != nullptr) {
+        {
+            std::lock_guard<std::mutex> lock(command_reader_->mutex);
+            command_reader_->stop = true;
+            command_reader_->armed = false;
+        }
+        command_reader_->condition.notify_all();
+    }
+    Close();
 }
 
 ssize_t ClientUsbTransport::Read(void* data, size_t len) {
@@ -308,4 +357,87 @@ int ClientUsbTransport::Close() {
 
 int ClientUsbTransport::Reset() {
     return 0;
+}
+
+int ClientUsbTransport::ReadFd() const {
+    return command_reader_ == nullptr ? -1 : command_reader_->event_fd.get();
+}
+
+ssize_t ClientUsbTransport::TryReadCommand(void* data, size_t len) {
+    if (command_reader_ == nullptr || len > SSIZE_MAX) return -1;
+
+    uint64_t signal = 0;
+    const ssize_t signal_bytes = TEMP_FAILURE_RETRY(
+            read(command_reader_->event_fd.get(), &signal, sizeof(signal)));
+    if (signal_bytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
+    if (signal_bytes != sizeof(signal)) return -1;
+
+    std::lock_guard<std::mutex> lock(command_reader_->mutex);
+    if (!command_reader_->ready || command_reader_->result <= 0) return 0;
+    const size_t bytes = std::min(len, static_cast<size_t>(command_reader_->result));
+    memcpy(data, command_reader_->command.data(), bytes);
+    command_reader_->ready = false;
+    command_reader_->result = 0;
+    return static_cast<ssize_t>(bytes);
+}
+
+void ClientUsbTransport::ArmCommandRead() {
+    if (command_reader_ == nullptr) return;
+    {
+        std::lock_guard<std::mutex> lock(command_reader_->mutex);
+        if (command_reader_->stop || command_reader_->ready ||
+            command_reader_->in_flight) {
+            return;
+        }
+        command_reader_->armed = true;
+    }
+    command_reader_->condition.notify_one();
+}
+
+void ClientUsbTransport::CommandReadLoop(std::shared_ptr<CommandReader> reader) {
+    for (;;) {
+        {
+            std::unique_lock<std::mutex> lock(reader->mutex);
+            reader->condition.wait(lock, [&] { return reader->stop || reader->armed; });
+            if (reader->stop) return;
+            reader->armed = false;
+            reader->in_flight = true;
+        }
+
+        std::array<char, FB_RESPONSE_SZ> command{};
+        const ssize_t result = reader->handle->read(
+                reader->handle.get(), command.data(), command.size(),
+                true /* allow_partial */);
+        const bool usb_selected =
+                android::base::GetProperty("fastbootd.protocol", "usb") != "tcp";
+        bool publish = false;
+        {
+            std::lock_guard<std::mutex> lock(reader->mutex);
+            reader->in_flight = false;
+            if (reader->stop) return;
+            if (result > 0 && usb_selected) {
+                std::copy_n(command.begin(), result, reader->command.begin());
+                reader->result = result;
+                reader->ready = true;
+                publish = true;
+            } else {
+                // A USB command that arrived while Wi-Fi was selected is
+                // deliberately discarded. It must never execute later when
+                // the user returns to USB.
+                reader->armed = true;
+            }
+        }
+
+        if (publish) {
+            uint64_t signal = 1;
+            if (TEMP_FAILURE_RETRY(
+                        write(reader->event_fd.get(), &signal, sizeof(signal))) !=
+                sizeof(signal)) {
+                PLOG(ERROR) << "ClientUsbTransport: cannot signal USB command";
+            }
+        } else {
+            if (result <= 0) std::this_thread::sleep_for(20ms);
+            reader->condition.notify_one();
+        }
+    }
 }

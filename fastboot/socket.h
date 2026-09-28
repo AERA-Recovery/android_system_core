@@ -63,6 +63,11 @@ class Socket {
     // calls to Send().
     static std::unique_ptr<Socket> NewServer(Protocol protocol, int port);
 
+    // Creates a TCP server reachable only through the device loopback
+    // interface. This is used when fastboot is carried inside an authenticated
+    // ADB forward and must never be exposed directly to the local network.
+    static std::unique_ptr<Socket> NewLoopbackServer(Protocol protocol, int port);
+
     // Destructor closes the socket if it's open.
     virtual ~Socket();
 
@@ -100,6 +105,16 @@ class Socket {
 
     // Returns the local port the Socket is bound to or -1 on error.
     int GetLocalPort();
+
+    // Returns the native descriptor used for readiness polling. Device-side
+    // transports use this to arbitrate several local Fastboot endpoints
+    // without consuming bytes from either one.
+    cutils_socket_t GetFd() const { return sock_; }
+
+    // Returns true only when the connected peer is IPv4/IPv6 loopback.
+    // Device Fastboot uses this to ensure its TCP endpoint is reachable only
+    // through an authenticated local ADB forward.
+    bool PeerIsLoopback() const;
 
   protected:
     // Protected constructor to force factory function use.

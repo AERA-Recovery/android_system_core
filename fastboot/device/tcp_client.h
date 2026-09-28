@@ -22,13 +22,15 @@
 
 class ClientTcpTransport : public Transport {
   public:
-    ClientTcpTransport();
+    explicit ClientTcpTransport(bool return_on_disconnect = false);
     ~ClientTcpTransport() override = default;
 
     ssize_t Read(void* data, size_t len) override;
     ssize_t Write(const void* data, size_t len) override;
     int Close() override;
     int Reset() override;
+
+    int ReadFd() const;
 
   private:
     void ListenFastbootSocket();
@@ -37,6 +39,7 @@ class ClientTcpTransport : public Transport {
     std::unique_ptr<Socket> socket_;
     uint64_t message_bytes_left_ = 0;
     bool downloading_ = false;
+    bool return_on_disconnect_ = false;
 
     DISALLOW_COPY_AND_ASSIGN(ClientTcpTransport);
 };

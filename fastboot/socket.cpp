@@ -29,7 +29,11 @@
 #include "socket.h"
 
 #ifndef _WIN32
+#include <netinet/in.h>
 #include <sys/select.h>
+#include <sys/socket.h>
+#else
+#include <winsock2.h>
 #endif
 
 #include <android-base/errors.h>
@@ -74,6 +78,35 @@ ssize_t Socket::ReceiveAll(void* data, size_t length, int timeout_ms) {
 
 int Socket::GetLocalPort() {
     return socket_get_local_port(sock_);
+}
+
+bool Socket::PeerIsLoopback() const {
+#ifndef _WIN32
+    sockaddr_storage storage = {};
+    socklen_t length = sizeof(storage);
+    if (getpeername(sock_, reinterpret_cast<sockaddr*>(&storage), &length) != 0) {
+        return false;
+    }
+    if (storage.ss_family == AF_INET) {
+        const auto* address = reinterpret_cast<const sockaddr_in*>(&storage);
+        return (ntohl(address->sin_addr.s_addr) >> 24) == 127;
+    }
+    if (storage.ss_family == AF_INET6) {
+        const auto* address = reinterpret_cast<const sockaddr_in6*>(&storage);
+        if (IN6_IS_ADDR_LOOPBACK(&address->sin6_addr)) return true;
+
+        // Android's ADB forwarding socket commonly reaches an AF_INET6
+        // listener as an IPv4-mapped peer (::ffff:127.x.x.x). It is still a
+        // kernel-local loopback connection and must be accepted; mapped WLAN
+        // addresses remain rejected.
+        if (IN6_IS_ADDR_V4MAPPED(&address->sin6_addr)) {
+            uint32_t mapped = 0;
+            memcpy(&mapped, &address->sin6_addr.s6_addr[12], sizeof(mapped));
+            return (ntohl(mapped) >> 24) == 127;
+        }
+    }
+#endif
+    return false;
 }
 
 // According to Windows setsockopt() documentation, if a Windows socket times out during send() or
@@ -284,6 +317,32 @@ std::unique_ptr<Socket> Socket::NewServer(Protocol protocol, int port) {
     }
 
     return nullptr;
+}
+
+std::unique_ptr<Socket> Socket::NewLoopbackServer(Protocol protocol, int port) {
+    const int type = protocol == Protocol::kUdp ? SOCK_DGRAM : SOCK_STREAM;
+    cutils_socket_t sock = socket(AF_INET, type, 0);
+    if (sock == INVALID_SOCKET) {
+        return nullptr;
+    }
+
+    int reuse = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse),
+               sizeof(reuse));
+    sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(sock, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
+        (type == SOCK_STREAM && listen(sock, 4) != 0)) {
+        socket_close(sock);
+        return nullptr;
+    }
+
+    if (protocol == Protocol::kUdp) {
+        return std::unique_ptr<UdpSocket>(new UdpSocket(UdpSocket::Type::kServer, sock));
+    }
+    return std::unique_ptr<TcpSocket>(new TcpSocket(sock));
 }
 
 std::string Socket::GetErrorMessage() {

@@ -32,6 +32,7 @@
 #include <healthhalutils/HealthHalUtils.h>
 
 #include "constants.h"
+#include "dual_client.h"
 #include "flashing.h"
 #include "tcp_client.h"
 #include "usb_client.h"
@@ -114,11 +115,10 @@ FastbootDevice::FastbootDevice()
       health_hal_(get_health_service()),
       fastboot_hal_(get_fastboot_service()),
       active_slot_("") {
-    if (android::base::GetProperty("fastbootd.protocol", "usb") == "tcp") {
-        transport_ = std::make_unique<ClientTcpTransport>();
-    } else {
-        transport_ = std::make_unique<ClientUsbTransport>();
-    }
+    // AERA's selector keeps both endpoints initialized so changing transport
+    // never restarts fastbootd. ClientDualTransport still permits exactly one
+    // selected endpoint to own commands; it is not simultaneous fastboot.
+    transport_ = std::make_unique<ClientDualTransport>();
 
     // Make sure cache is unmounted, since recovery will have mounted it for
     // logging.
