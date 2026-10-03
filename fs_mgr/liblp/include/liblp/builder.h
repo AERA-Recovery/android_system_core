@@ -352,6 +352,16 @@ class MetadataBuilder {
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
+    // Raise the recorded size of each block device to its real size.
+    // It only grows the size and never shrinks it, so old partitions stay valid.
+    // Returns true if at least one device was grown.
+    //
+    // This is kept separate from UpdateBlockDeviceInfo on purpose, because that
+    // one keeps the recorded size as it is. Use this only when you know the
+    // super partition is bigger than what the current table was made for, for
+    // example when the table on the device was written for a smaller super.
+    bool GrowBlockDevicesToLiveSize(const IPartitionOpener& opener);
+
     // Require the expanded metadata header. This is exposed for testing, and
     // is normally only called as needed by other methods.
     void RequireExpandedMetadataHeader();

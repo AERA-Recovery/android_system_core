@@ -491,6 +491,43 @@ TEST_F(BuilderTest, UpdateBlockDeviceInfo) {
     EXPECT_EQ(new_info.logical_block_size, 4096);
 }
 
+namespace {
+class FixedSizeOpener : public IPartitionOpener {
+  public:
+    explicit FixedSizeOpener(uint64_t size) : size_(size) {}
+    android::base::unique_fd Open(const std::string&, int) const override { return {}; }
+    bool GetInfo(const std::string& name, BlockDeviceInfo* info) const override {
+        *info = BlockDeviceInfo(name, size_, 0, 0, 4096);
+        return true;
+    }
+    std::string GetDeviceString(const std::string& name) const override { return name; }
+
+  private:
+    uint64_t size_;
+};
+}  // namespace
+
+TEST_F(BuilderTest, GrowBlockDevicesToLiveSize) {
+    BlockDeviceInfo device_info("super", 1024 * 1024, 4096, 1024, 4096);
+    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);
+    ASSERT_NE(builder, nullptr);
+
+    // Same size, nothing changes.
+    EXPECT_FALSE(builder->GrowBlockDevicesToLiveSize(FixedSizeOpener(1024 * 1024)));
+    // Smaller device, it never shrinks.
+    EXPECT_FALSE(builder->GrowBlockDevicesToLiveSize(FixedSizeOpener(512 * 1024)));
+    BlockDeviceInfo info;
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &info));
+    EXPECT_EQ(info.size, 1024 * 1024);
+
+    // Bigger device, it grows and the free space grows with it.
+    uint64_t before = builder->AllocatableSpace();
+    EXPECT_TRUE(builder->GrowBlockDevicesToLiveSize(FixedSizeOpener(2 * 1024 * 1024)));
+    ASSERT_TRUE(builder->GetBlockDeviceInfo("super", &info));
+    EXPECT_EQ(info.size, 2 * 1024 * 1024);
+    EXPECT_EQ(builder->AllocatableSpace(), before + 1024 * 1024);
+}
+
 TEST_F(BuilderTest, InvalidBlockSize) {
     BlockDeviceInfo device_info("super", 1024 * 1024, 0, 0, 513);
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(device_info, 1024, 1);

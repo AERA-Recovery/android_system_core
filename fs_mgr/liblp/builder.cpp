@@ -1066,6 +1066,25 @@ bool MetadataBuilder::UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo&
     return true;
 }
 
+bool MetadataBuilder::GrowBlockDevicesToLiveSize(const IPartitionOpener& opener) {
+    bool grown = false;
+    for (size_t i = 0; i < block_devices_.size(); i++) {
+        BlockDeviceInfo device_info;
+        if (!opener.GetInfo(GetBlockDevicePartitionName(i), &device_info)) {
+            continue;
+        }
+        LpMetadataBlockDevice& block_device = block_devices_[i];
+        if (device_info.size <= block_device.size) {
+            continue;
+        }
+        LINFO << "Growing block device " << i << " from " << block_device.size << " to "
+              << device_info.size;
+        block_device.size = device_info.size;
+        grown = true;
+    }
+    return grown;
+}
+
 bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size,
                                       const std::vector<Interval>& free_region_hint) {
     // Align the space needed up to the nearest sector.
